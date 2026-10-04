@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SidelineReel: Tag check prototype</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef2f4;--ink:#12212b;--mut:#5b6b75;--card:#fff;--line:#cfd9de;--g:#1f7a4d;--gl:#dff1e7;--a:#b86e00;--al:#fdf0d6;--r:#b3261e}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a20;--ink:#e8eff2;--mut:#9fb0b9;--card:#172730;--line:#2c414c;--g:#5fd29a;--gl:#173a2b;--a:#f0b04a;--al:#3a2c0e;--r:#ff8a80}}
+:root[data-theme="dark"]{--bg:#0f1a20;--ink:#e8eff2;--mut:#9fb0b9;--card:#172730;--line:#2c414c;--g:#5fd29a;--gl:#173a2b;--a:#f0b04a;--al:#3a2c0e;--r:#ff8a80}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Avenir Next","Segoe UI",Helvetica,Arial,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font:700 22px/1.2 Georgia,"Times New Roman",serif;margin:4px 0 2px}
+.sub{color:var(--mut);font-size:14px;margin:0 0 14px}
+nav{display:flex;gap:6px;margin-bottom:14px}
+nav button{flex:1;padding:10px 6px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;font:inherit;font-size:14px;cursor:pointer}
+nav button[aria-current="true"]{background:var(--g);color:#fff;border-color:var(--g);font-weight:700}
+nav button:focus-visible,.btn:focus-visible,.chip:focus-visible{outline:3px solid var(--a);outline-offset:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stat{flex:1;min-width:90px;padding:10px;border-radius:8px;background:var(--bg)}
+.stat b{display:block;font-size:24px}
+.stat.hold{background:var(--al)}.stat.ok{background:var(--gl)}
+.btn{padding:10px 14px;border-radius:8px;border:1px solid var(--g);background:var(--g);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+.btn.sec{background:transparent;color:var(--ink);border-color:var(--line);font-weight:400}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.clip{display:flex;gap:12px}
+.thumb{width:84px;min-width:84px;height:84px;border-radius:8px;background:#2a6a4a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px}
+.thumb b{font-size:30px;line-height:1}
+.chip{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--g);color:#fff;border-color:var(--g)}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--al);color:var(--a);font-weight:700}
+.done{background:var(--gl);color:var(--g)}
+.note{font-size:13px;color:var(--mut)}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;background:var(--g);transition:width .25s}
+.flag{color:var(--r);border-color:var(--r)}
+.toast{position:sticky;bottom:12px;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:8px;margin-top:8px;font-size:14px}
+.banner{font-size:12px;background:var(--al);color:var(--a);padding:6px 10px;border-radius:6px;margin-bottom:12px}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<div class="banner">Prototype with sample data. Nothing is sent to real families.</div>
+<h1>SidelineReel tag check</h1>
+<p class="sub">Ridgeline U12 vs Harbor FC. Saturday game. Built for the roster tagging accuracy spec.</p>
+<nav id="nav" aria-label="Flow steps"></nav>
+<div id="view"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+</main>
+<script>
+var held=[
+ {id:"c1",seen:"4",kind:"Goal",time:"12:40",conf:"Low confidence",cand:[{n:"Maya",num:4},{n:"Ava",num:14}]},
+ {id:"c2",seen:"11",kind:"Save",time:"27:05",conf:"Low confidence",cand:[{n:"Leo",num:1},{n:"Sam",num:11}]},
+ {id:"c3",seen:"21",kind:"Big play",time:"41:18",conf:"Digits may be swapped",cand:[{n:"Noah",num:12},{n:"Eli",num:21}]}
+];
+var base=[{id:"b1",kind:"Assist",time:"09:22"},{id:"b2",kind:"Goal",time:"33:50"}];
+var S={step:0,pick:{},decided:{},sent:false,removed:{},flags:0};
+var $=function(i){return document.getElementById(i)};
+function toast(t){var e=$("toast");e.textContent=t;e.hidden=false;clearTimeout(window._t);window._t=setTimeout(function(){e.hidden=true},3500)}
+function go(n){S.step=n;render()}
+function nav(){
+ var l=["1 Game processed","2 Coach review","3 Parent reel"];
+ $("nav").innerHTML=l.map(function(t,i){return '<button data-s="'+i+'" aria-current="'+(S.step===i)+'">'+t+'</button>'}).join("");
+ Array.prototype.forEach.call($("nav").children,function(b){b.onclick=function(){go(+b.dataset.s)}});
+}
+function count(){return Object.keys(S.decided).length}
+function s0(){
+ return '<div class="card"><div class="row"><div class="stat">Highlights found<b>38</b></div><div class="stat ok">Tagged with confidence<b>35</b></div><div class="stat hold">Held for coach<b>3</b></div></div>'+
+ '<p>Three clips show a jersey number that is easy to confuse with another number on your roster (4 and 14, 1 and 11, 12 and 21). We hold them back instead of guessing, so no family gets another kid\'s clip.</p>'+
+ '<button class="btn" id="go">Review 3 held clips</button></div>'+
+ '<p class="note">Held clips are never added to any reel until a coach confirms them. After 48 hours, unconfirmed clips are left out and the other reels still go out.</p>';
+}
+function s1(){
+ var n=count(),h=held.map(function(c){
+  var d=S.decided[c.id],p=S.pick[c.id];
+  var chips=c.cand.map(function(k){return '<button class="chip" data-c="'+c.id+'" data-v="'+k.n+'" aria-pressed="'+(p===k.n)+'">#'+k.num+' '+k.n+'</button>'}).join(" ")+
+   ' <button class="chip" data-c="'+c.id+'" data-v="none" aria-pressed="'+(p==="none")+'">Leave out</button>';
+  return '<div class="card"><div class="clip"><div class="thumb"><span>Seen</span><b>#'+c.seen+'</b></div><div><b>'+c.kind+' at '+c.time+'</b> '+
+   (d?'<span class="tag done">'+(d==="none"?'Left out':'Confirmed: '+d)+'</span>':'<span class="tag">'+c.conf+'</span>')+
+   '<p class="note" style="margin:4px 0 8px">Who is this player?</p>'+(d?'':chips)+
+   (d?'':'<p style="margin:10px 0 0"><button class="btn" data-ok="'+c.id+'"'+(p?'':' disabled')+'>Confirm</button></p>')+'</div></div></div>';
+ }).join("");
+ return '<div class="card"><b>'+n+' of 3 reviewed</b><div class="bar"><i style="width:'+(n/3*100)+'%"></i></div></div>'+h+
+  '<button class="btn" id="send"'+(n<3?' disabled':'')+'>'+(S.sent?'Reels sent':'Send reels to families')+'</button>'+
+  (n<3?'<p class="note">Review all held clips, or leave the rest for 48 hours and send now.</p>':'')+
+  '<p><button class="btn sec" id="skip">Send now and leave unreviewed clips out</button></p>';
+}
+function s2(){
+ var extra=held.filter(function(c){return S.decided[c.id]==="Ava"}).map(function(c){return {id:c.id,kind:c.kind,time:c.time,coach:true}});
+ var clips=base.concat(extra).filter(function(c){return !S.removed[c.id]});
+ var l=clips.map(function(c){return '<div class="card"><div class="clip"><div class="thumb"><span>Ava</span><b>#14</b></div><div style="flex:1"><b>'+c.kind+' at '+c.time+'</b><p class="note" style="margin:2px 0 8px">'+(c.coach?'Confirmed by coach':'Matched with high confidence')+'</p><button class="btn sec flag" data-r="'+c.id+'">Not my kid</button></div></div></div>'}).join("");
+ return '<div class="card"><b>Ava\'s week</b><p class="note" style="margin:2px 0">Thumbnail uses only confirmed or high confidence clips. '+clips.length+' clips in this reel.</p></div>'+
+  (clips.length?l:'<div class="card">No confirmed highlights for Ava this week. We would rather send nothing than send the wrong kid.</div>')+
+  '<p class="note">Wrong kid reports this session: '+S.flags+'. Each one removes the clip at once and alerts the coach.</p>';
+}
+function render(){
+ nav();
+ $("view").innerHTML=[s0,s1,s2][S.step]();
+ var g=$("go");if(g)g.onclick=function(){go(1)};
+ Array.prototype.forEach.call(document.querySelectorAll("[data-v]"),function(b){b.onclick=function(){S.pick[b.dataset.c]=b.dataset.v;render()}});
+ Array.prototype.forEach.call(document.querySelectorAll("[data-ok]"),function(b){b.onclick=function(){var id=b.dataset.ok;S.decided[id]=S.pick[id];toast("Clip confirmed and logged.");render()}});
+ Array.prototype.forEach.call(document.querySelectorAll("[data-r]"),function(b){b.onclick=function(){S.removed[b.dataset.r]=1;S.flags++;toast("Removed from the reel. Your coach has been told.");render()}});
+ var s=$("send");if(s)s.onclick=function(){S.sent=true;toast("Reels sent. Opening Ava\'s reel.");go(2)};
+ var k=$("skip");if(k)k.onclick=function(){held.forEach(function(c){if(!S.decided[c.id])S.decided[c.id]="none"});S.sent=true;toast("Sent. Unreviewed clips were left out.");go(2)};
+}
+render();
+</script>
+</body>
+</html>
